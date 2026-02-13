@@ -6,15 +6,293 @@
     <title>{{ query }} - Buscador</title>
     <link rel="stylesheet" href="/static/style.css">
     <style>
-        .result-item {
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #fff;
+            color: #202124;
+        }
+        
+        .results-header {
+            position: sticky;
+            top: 0;
+            background: white;
+            border-bottom: 1px solid #ebebeb;
+            padding: 15px 20px;
+            z-index: 1000;
+        }
+        
+        .header-content {
+            display: flex;
+            align-items: center;
+            max-width: 1200px;
+            margin: 0 auto;
+            gap: 30px;
+        }
+        
+        .results-logo {
+            font-size: 24px;
+            text-decoration: none;
+            color: #202124;
+            font-weight: 400;
+            white-space: nowrap;
+        }
+        
+        .results-logo span {
+            color: #1a73e8;
+        }
+        
+        .results-search-form {
+            display: flex;
+            flex: 1;
+            max-width: 600px;
+            gap: 10px;
+        }
+        
+        .results-search-input {
+            flex: 1;
+            padding: 12px 16px;
+            font-size: 16px;
+            border: 1px solid #dfe1e5;
+            border-radius: 24px;
+            outline: none;
+        }
+        
+        .results-search-input:focus {
+            box-shadow: 0 1px 6px rgba(32,33,36,0.28);
+            border-color: rgba(223,225,229,0);
+        }
+        
+        .results-search-button {
+            background: #1a73e8;
+            color: white;
+            border: none;
+            padding: 0 25px;
+            border-radius: 24px;
             cursor: pointer;
-            transition: background 0.2s;
+            font-weight: 500;
+        }
+        
+        .results-container {
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 0 20px;
+        }
+        
+        .results-stats {
+            color: #70757a;
+            font-size: 14px;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #ebebeb;
+        }
+        
+        .results-list {
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+        }
+        
+        .result-item {
             padding: 15px;
-            border-radius: 8px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid transparent;
         }
         
         .result-item:hover {
             background: #f8f9fa;
+            border-color: #dadce0;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .result-url {
+            color: #006621;
+            font-size: 14px;
+            margin-bottom: 5px;
+        }
+        
+        .result-title {
+            color: #1a0dab;
+            font-size: 20px;
+            text-decoration: none;
+            display: inline-block;
+            margin-bottom: 8px;
+            font-weight: 400;
+        }
+        
+        .result-title:hover {
+            text-decoration: underline;
+        }
+        
+        .result-description {
+            color: #4d5156;
+            font-size: 14px;
+            line-height: 1.58;
+            margin-bottom: 8px;
+        }
+        
+        .result-meta {
+            display: flex;
+            gap: 15px;
+            font-size: 12px;
+            color: #5f6368;
+        }
+        
+        .result-meta span {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        .badge-cache {
+            background: #e8f0fe;
+            color: #1a73e8;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+        }
+        
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 50px;
+            padding: 20px 0;
+        }
+        
+        .page-link,
+        .page-current {
+            padding: 10px 15px;
+            text-decoration: none;
+            color: #1a73e8;
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+        
+        .page-link:hover {
+            background: #f1f3f4;
+        }
+        
+        .page-current {
+            background: #1a73e8;
+            color: white;
+        }
+        
+        .no-results {
+            text-align: center;
+            padding: 60px 20px;
+            background: #f8f9fa;
+            border-radius: 16px;
+            margin-top: 30px;
+        }
+        
+        .no-results p {
+            color: #5f6368;
+            margin-bottom: 20px;
+            font-size: 16px;
+        }
+        
+        .search-web-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 30px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s;
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.3);
+        }
+        
+        .search-web-button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+        }
+        
+        .internet-results {
+            margin-top: 40px;
+            padding: 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 16px;
+            color: white;
+        }
+        
+        .internet-results h3 {
+            margin-bottom: 20px;
+            font-size: 20px;
+        }
+        
+        .internet-result {
+            padding: 20px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 12px;
+            margin-bottom: 15px;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: 1px solid transparent;
+        }
+        
+        .internet-result:hover {
+            background: rgba(255,255,255,0.2);
+            transform: translateY(-2px);
+            border-color: white;
+        }
+        
+        .internet-result .title {
+            font-size: 18px;
+            font-weight: 500;
+            margin-bottom: 8px;
+        }
+        
+        .internet-result .url {
+            font-size: 13px;
+            opacity: 0.8;
+            margin-bottom: 8px;
+            word-break: break-all;
+        }
+        
+        .internet-result .description {
+            font-size: 14px;
+            opacity: 0.9;
+            margin-bottom: 10px;
+        }
+        
+        .internet-result .source {
+            font-size: 11px;
+            opacity: 0.7;
+            display: inline-block;
+            padding: 2px 8px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 12px;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+        }
+        
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
         
         .iframe-container {
@@ -33,9 +311,9 @@
         }
         
         .iframe-header {
-            background: #1a73e8;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 10px;
+            padding: 12px;
             display: flex;
             align-items: center;
             gap: 10px;
@@ -48,81 +326,42 @@
         
         .iframe-header button {
             background: white;
-            color: #1a73e8;
+            color: #667eea;
             border: none;
-            padding: 5px 15px;
-            border-radius: 4px;
+            padding: 8px 20px;
+            border-radius: 20px;
             cursor: pointer;
+            font-weight: 600;
         }
         
         .iframe-header input {
             flex: 1;
-            padding: 5px;
+            padding: 8px 15px;
             border: none;
-            border-radius: 4px;
+            border-radius: 20px;
+            background: rgba(255,255,255,0.2);
+            color: white;
+            outline: none;
+        }
+        
+        .iframe-header select {
+            background: white;
+            color: #667eea;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 20px;
+            cursor: pointer;
         }
         
         .iframe-content {
             position: fixed;
-            top: 50px;
+            top: 60px;
             left: 0;
             right: 0;
             bottom: 0;
             width: 100%;
-            height: calc(100% - 50px);
+            height: calc(100% - 60px);
             border: none;
-        }
-        
-        .no-results {
-            text-align: center;
-            padding: 60px 20px;
-        }
-        
-        .search-web-button {
-            background: #1a73e8;
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 16px;
-            margin-top: 20px;
-        }
-        
-        .internet-results {
-            margin-top: 30px;
-            padding: 20px;
-            background: #f8f9fa;
-            border-radius: 8px;
-        }
-        
-        .internet-result {
-            padding: 10px;
-            border-bottom: 1px solid #dadce0;
-        }
-        
-        .internet-result:last-child {
-            border-bottom: none;
-        }
-        
-        .loading {
-            text-align: center;
-            padding: 40px;
-        }
-        
-        .loading-spinner {
-            border: 3px solid #f3f3f3;
-            border-top: 3px solid #1a73e8;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 20px;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
         }
     </style>
 </head>
@@ -142,9 +381,7 @@
     <div class="results-container">
         <div class="results-stats">
             {{ total }} resultados encontrados
-            <span style="margin-left: 20px; color: #5f6368;">
-                User Agent: {{ user_agent }}
-            </span>
+            <span style="margin-left: 20px;">User Agent: {{ user_agent }}</span>
         </div>
         
         {% if resultados %}
@@ -154,8 +391,12 @@
                         <div class="result-url">{{ resultado.url }}</div>
                         <div class="result-title">{{ resultado.title }}</div>
                         <div class="result-description">{{ resultado.description }}</div>
-                        <div style="margin-top: 5px; font-size: 12px; color: #5f6368;">
-                            🔗 Haz click para abrir dentro del buscador
+                        <div class="result-meta">
+                            <span>🌐 {{ resultado.domain }}</span>
+                            <span>📊 Relevancia: {{ resultado.relevance }}</span>
+                            {% if resultado.from_cache %}
+                                <span class="badge-cache">📦 En caché</span>
+                            {% endif %}
                         </div>
                     </div>
                 {% endfor %}
@@ -175,27 +416,18 @@
         {% else %}
             <div class="no-results">
                 <p>No se encontraron resultados para "{{ query }}" en el índice local</p>
-                
-                {% if buscar_en_internet %}
-                    <div id="internetSearch">
-                        <div class="loading">
-                            <div class="loading-spinner"></div>
-                            <p>Buscando en internet...</p>
-                        </div>
-                    </div>
-                {% else %}
-                    <button onclick="buscarEnInternet()" class="search-web-button">
-                        🌐 Buscar en internet y añadir a mi índice
-                    </button>
-                    <p style="margin-top: 20px; color: #5f6368;">
-                        Al buscar en internet, los resultados se añadirán automáticamente a tu índice local
-                    </p>
-                {% endif %}
+                <button onclick="buscarEnInternet()" class="search-web-button">
+                    🌐 Buscar en internet y añadir a mi índice
+                </button>
+                <p style="margin-top: 20px; font-size: 13px;">
+                    Al buscar en internet, los resultados se añadirán automáticamente a tu índice local
+                </p>
             </div>
+            
+            <div id="internetSearch" style="display: none;"></div>
         {% endif %}
     </div>
     
-    <!-- Iframe Container -->
     <div id="iframeContainer" class="iframe-container">
         <div class="iframe-header">
             <button onclick="cerrarIframe()">← Volver</button>
@@ -206,9 +438,10 @@
                 <option value="safari">Safari</option>
                 <option value="iphone">iPhone</option>
                 <option value="android">Android</option>
+                <option value="bot">Googlebot</option>
             </select>
         </div>
-        <iframe id="iframeContent" class="iframe-content" sandbox="allow-same-origin allow-scripts allow-forms allow-popups"></iframe>
+        <iframe id="iframeContent" class="iframe-content" sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals"></iframe>
     </div>
     
     <script>
@@ -232,19 +465,44 @@
             document.getElementById('iframeContent').src = `/proxy?url=${encodeURIComponent(url)}&ua=${ua}`;
         }
         
-        {% if buscar_en_internet %}
-            // Buscar automáticamente en internet
-            buscarEnInternet();
-        {% endif %}
+        function cambiarUA(ua, url) {
+            document.getElementById('iframeUserAgent').value = ua;
+            document.getElementById('iframeContent').src = `/proxy?url=${encodeURIComponent(url)}&ua=${ua}`;
+        }
+        
+        function indexarURL(url) {
+            const ua = document.getElementById('iframeUserAgent').value;
+            
+            fetch('/abrir_url', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    url: url,
+                    user_agent: ua,
+                    indexar: true
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('✅ Página añadida al índice correctamente');
+                } else {
+                    alert('❌ Error al indexar: ' + data.error);
+                }
+            });
+        }
         
         function buscarEnInternet() {
             const container = document.getElementById('internetSearch');
-            if (!container) return;
+            container.style.display = 'block';
             
             container.innerHTML = `
                 <div class="loading">
                     <div class="loading-spinner"></div>
-                    <p>Buscando en Google y añadiendo resultados al índice...</p>
+                    <p>Buscando en Google, DuckDuckGo y Bing...</p>
+                    <p style="font-size: 13px; margin-top: 10px;">Añadiendo resultados al índice automáticamente</p>
                 </div>
             `;
             
@@ -262,36 +520,35 @@
             .then(data => {
                 if (data.success) {
                     let html = '<div class="internet-results">';
-                    html += `<h3>✅ Resultados encontrados en internet (${data.indexadas} añadidas al índice)</h3>`;
+                    html += `<h3>✅ Resultados encontrados (${data.indexadas} añadidas al índice)</h3>`;
                     
                     data.resultados.forEach(result => {
                         html += `
-                            <div class="internet-result" onclick="abrirEnIframe('${result.url}')" style="cursor: pointer;">
-                                <div style="color: #1a73e8; font-size: 14px;">${result.url}</div>
-                                <div style="font-size: 18px; margin: 5px 0;">${result.title}</div>
-                                <div style="color: #4d5156;">${result.description}</div>
-                                <div style="margin-top: 5px; font-size: 12px; color: #5f6368;">
-                                    🔗 Click para abrir
-                                </div>
+                            <div class="internet-result" onclick="abrirEnIframe('${result.url}')">
+                                <div class="title">${result.title}</div>
+                                <div class="url">${result.url}</div>
+                                <div class="description">${result.description}</div>
+                                <div class="source">Fuente: ${result.source}</div>
                             </div>
                         `;
                     });
                     
-                    html += '<div style="margin-top: 20px;"><button onclick="location.reload()" class="search-web-button">Ver resultados en índice local</button></div>';
-                    html += '</div>';
+                    html += '<div style="margin-top: 30px; text-align: center;">';
+                    html += '<button onclick="location.reload()" class="search-web-button">Ver resultados en índice local</button>';
+                    html += '</div></div>';
                     
                     container.innerHTML = html;
                 } else {
                     container.innerHTML = `
-                        <div style="color: #c5221f; padding: 20px;">
-                            ❌ Error al buscar en internet: ${data.error}
+                        <div style="color: #d93025; padding: 30px; text-align: center; background: #fce8e6; border-radius: 12px; margin-top: 30px;">
+                            ❌ Error al buscar: ${data.error}
                         </div>
                     `;
                 }
             })
             .catch(error => {
                 container.innerHTML = `
-                    <div style="color: #c5221f; padding: 20px;">
+                    <div style="color: #d93025; padding: 30px; text-align: center; background: #fce8e6; border-radius: 12px; margin-top: 30px;">
                         ❌ Error: ${error}
                     </div>
                 `;
