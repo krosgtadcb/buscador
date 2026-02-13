@@ -5,6 +5,126 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ query }} - Buscador</title>
     <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .result-item {
+            cursor: pointer;
+            transition: background 0.2s;
+            padding: 15px;
+            border-radius: 8px;
+        }
+        
+        .result-item:hover {
+            background: #f8f9fa;
+        }
+        
+        .iframe-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: white;
+            z-index: 10000;
+            display: none;
+        }
+        
+        .iframe-container.active {
+            display: block;
+        }
+        
+        .iframe-header {
+            background: #1a73e8;
+            color: white;
+            padding: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 10001;
+        }
+        
+        .iframe-header button {
+            background: white;
+            color: #1a73e8;
+            border: none;
+            padding: 5px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        .iframe-header input {
+            flex: 1;
+            padding: 5px;
+            border: none;
+            border-radius: 4px;
+        }
+        
+        .iframe-content {
+            position: fixed;
+            top: 50px;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            width: 100%;
+            height: calc(100% - 50px);
+            border: none;
+        }
+        
+        .no-results {
+            text-align: center;
+            padding: 60px 20px;
+        }
+        
+        .search-web-button {
+            background: #1a73e8;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 20px;
+        }
+        
+        .internet-results {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        
+        .internet-result {
+            padding: 10px;
+            border-bottom: 1px solid #dadce0;
+        }
+        
+        .internet-result:last-child {
+            border-bottom: none;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+        }
+        
+        .loading-spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #1a73e8;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
 </head>
 <body>
     <div class="results-header">
@@ -13,6 +133,7 @@
             
             <form action="/search" method="get" class="results-search-form">
                 <input type="text" name="q" class="results-search-input" value="{{ query }}">
+                <input type="hidden" name="ua" value="{{ user_agent }}">
                 <button type="submit" class="results-search-button">Buscar</button>
             </form>
         </div>
@@ -20,16 +141,22 @@
     
     <div class="results-container">
         <div class="results-stats">
-            {{ total }} resultados ({{ "%.2f"|format(total/0.5) }} segundos)
+            {{ total }} resultados encontrados
+            <span style="margin-left: 20px; color: #5f6368;">
+                User Agent: {{ user_agent }}
+            </span>
         </div>
         
         {% if resultados %}
             <div class="results-list">
                 {% for resultado in resultados %}
-                    <div class="result-item">
+                    <div class="result-item" onclick="abrirEnIframe('{{ resultado.url }}')">
                         <div class="result-url">{{ resultado.url }}</div>
-                        <a href="{{ resultado.url }}" class="result-title" target="_blank">{{ resultado.title }}</a>
+                        <div class="result-title">{{ resultado.title }}</div>
                         <div class="result-description">{{ resultado.description }}</div>
+                        <div style="margin-top: 5px; font-size: 12px; color: #5f6368;">
+                            🔗 Haz click para abrir dentro del buscador
+                        </div>
                     </div>
                 {% endfor %}
             </div>
@@ -40,22 +167,136 @@
                         {% if p == page %}
                             <span class="page-current">{{ p }}</span>
                         {% else %}
-                            <a href="/search?q={{ query }}&page={{ p }}" class="page-link">{{ p }}</a>
+                            <a href="/search?q={{ query }}&page={{ p }}&ua={{ user_agent }}" class="page-link">{{ p }}</a>
                         {% endif %}
                     {% endfor %}
                 </div>
             {% endif %}
         {% else %}
             <div class="no-results">
-                <p>No se encontraron resultados para "{{ query }}"</p>
-                <p>Sugerencias:</p>
-                <ul>
-                    <li>Revisa la ortografía</li>
-                    <li>Prueba con palabras más generales</li>
-                    <li>Indexa más sitios web desde el panel de administración</li>
-                </ul>
+                <p>No se encontraron resultados para "{{ query }}" en el índice local</p>
+                
+                {% if buscar_en_internet %}
+                    <div id="internetSearch">
+                        <div class="loading">
+                            <div class="loading-spinner"></div>
+                            <p>Buscando en internet...</p>
+                        </div>
+                    </div>
+                {% else %}
+                    <button onclick="buscarEnInternet()" class="search-web-button">
+                        🌐 Buscar en internet y añadir a mi índice
+                    </button>
+                    <p style="margin-top: 20px; color: #5f6368;">
+                        Al buscar en internet, los resultados se añadirán automáticamente a tu índice local
+                    </p>
+                {% endif %}
             </div>
         {% endif %}
     </div>
+    
+    <!-- Iframe Container -->
+    <div id="iframeContainer" class="iframe-container">
+        <div class="iframe-header">
+            <button onclick="cerrarIframe()">← Volver</button>
+            <input type="text" id="iframeUrl" readonly>
+            <select id="iframeUserAgent" onchange="recargarIframe()">
+                <option value="chrome">Chrome</option>
+                <option value="firefox">Firefox</option>
+                <option value="safari">Safari</option>
+                <option value="iphone">iPhone</option>
+                <option value="android">Android</option>
+            </select>
+        </div>
+        <iframe id="iframeContent" class="iframe-content" sandbox="allow-same-origin allow-scripts allow-forms allow-popups"></iframe>
+    </div>
+    
+    <script>
+        const userAgent = '{{ user_agent }}';
+        
+        function abrirEnIframe(url) {
+            document.getElementById('iframeUrl').value = url;
+            document.getElementById('iframeContent').src = `/proxy?url=${encodeURIComponent(url)}&ua=${userAgent}`;
+            document.getElementById('iframeContainer').classList.add('active');
+            document.getElementById('iframeUserAgent').value = userAgent;
+        }
+        
+        function cerrarIframe() {
+            document.getElementById('iframeContainer').classList.remove('active');
+            document.getElementById('iframeContent').src = 'about:blank';
+        }
+        
+        function recargarIframe() {
+            const url = document.getElementById('iframeUrl').value;
+            const ua = document.getElementById('iframeUserAgent').value;
+            document.getElementById('iframeContent').src = `/proxy?url=${encodeURIComponent(url)}&ua=${ua}`;
+        }
+        
+        {% if buscar_en_internet %}
+            // Buscar automáticamente en internet
+            buscarEnInternet();
+        {% endif %}
+        
+        function buscarEnInternet() {
+            const container = document.getElementById('internetSearch');
+            if (!container) return;
+            
+            container.innerHTML = `
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    <p>Buscando en Google y añadiendo resultados al índice...</p>
+                </div>
+            `;
+            
+            fetch('/buscar_en_internet', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    query: '{{ query }}',
+                    user_agent: userAgent
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    let html = '<div class="internet-results">';
+                    html += `<h3>✅ Resultados encontrados en internet (${data.indexadas} añadidas al índice)</h3>`;
+                    
+                    data.resultados.forEach(result => {
+                        html += `
+                            <div class="internet-result" onclick="abrirEnIframe('${result.url}')" style="cursor: pointer;">
+                                <div style="color: #1a73e8; font-size: 14px;">${result.url}</div>
+                                <div style="font-size: 18px; margin: 5px 0;">${result.title}</div>
+                                <div style="color: #4d5156;">${result.description}</div>
+                                <div style="margin-top: 5px; font-size: 12px; color: #5f6368;">
+                                    🔗 Click para abrir
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    html += '<div style="margin-top: 20px;"><button onclick="location.reload()" class="search-web-button">Ver resultados en índice local</button></div>';
+                    html += '</div>';
+                    
+                    container.innerHTML = html;
+                } else {
+                    container.innerHTML = `
+                        <div style="color: #c5221f; padding: 20px;">
+                            ❌ Error al buscar en internet: ${data.error}
+                        </div>
+                    `;
+                }
+            })
+            .catch(error => {
+                container.innerHTML = `
+                    <div style="color: #c5221f; padding: 20px;">
+                        ❌ Error: ${error}
+                    </div>
+                `;
+            });
+        }
+    </script>
 </body>
 </html>
