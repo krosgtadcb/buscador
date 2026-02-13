@@ -5,293 +5,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Panel de Administración - Buscador</title>
     <link rel="stylesheet" href="/static/style.css">
-</head>
-<body>
-    <div class="admin-header">
-        <div class="header-content">
-            <a href="/" class="admin-logo">Buscador<span>.local</span></a>
-            <span class="admin-title">Panel de Administración</span>
-        </div>
-    </div>
-    
-    <div class="admin-container">
-        <div class="admin-grid">
-            <div class="admin-card">
-                <h2>Estadísticas</h2>
-                <div class="stats-grid">
-                    <div class="stat-card">
-                        <div class="stat-value">{{ stats.total_paginas }}</div>
-                        <div class="stat-label">Páginas</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value">{{ stats.total_keywords }}</div>
-                        <div class="stat-label">Keywords</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value">{{ stats.total_domains }}</div>
-                        <div class="stat-label">Dominios</div>
-                    </div>
-                </div>
-                <div class="stats-info">
-                    <p><strong>Última actualización:</strong> {{ stats.last_update or 'Nunca' }}</p>
-                    <p><strong>Creado:</strong> {{ stats.created[:10] if stats.created else 'N/A' }}</p>
-                </div>
-            </div>
-            
-            <!-- CRAWLER INFINITO - NUEVO -->
-            <div class="admin-card" style="border: 2px solid #d93025;">
-                <h2 style="color: #d93025;">🌐 CRAWLER INFINITO</h2>
-                <p style="color: #5f6368; font-size: 14px; margin-bottom: 15px;">
-                    ⚡ <strong>NUNCA SE DETIENE</strong> - Va de web en web automáticamente<br>
-                    🔗 Auto-descubrimiento de nuevos dominios<br>
-                    📈 Expansión constante - Modo autoalimentado
-                </p>
-                <form id="crawlInfiniteForm" class="crawl-form">
-                    <input type="hidden" name="action" value="start_infinite">
-                    <div style="margin-bottom: 15px; background: #fff1f0; padding: 10px; border-radius: 4px;">
-                        <p style="margin: 0; color: #d93025; font-size: 13px;">
-                            <strong>⚠️ ADVERTENCIA:</strong> Este modo nunca se detiene automáticamente.<br>
-                            Indexará páginas hasta que lo detengas manualmente.
-                        </p>
-                    </div>
-                    <button type="submit" class="crawl-button" style="background: #d93025; color: white; width: 100%; padding: 15px; font-size: 16px; font-weight: bold; border: none; border-radius: 4px; cursor: pointer;">
-                        🚀 INICIAR CRAWLER INFINITO
-                    </button>
-                </form>
-            </div>
-            
-            <div class="admin-card">
-                <h2>Rastreo Automático</h2>
-                <p style="color: #5f6368; font-size: 14px; margin-bottom: 15px;">El crawler buscará sitios web automáticamente desde nuestra lista de semillas</p>
-                <form id="crawlAutoForm" class="crawl-form">
-                    <input type="hidden" name="action" value="start_auto">
-                    <div style="margin-bottom: 10px;">
-                        <label style="display: block; margin-bottom: 5px; color: #5f6368;">Páginas máximas a indexar:</label>
-                        <input type="number" 
-                               name="max_pages" 
-                               value="500" 
-                               class="crawl-pages"
-                               min="10" 
-                               max="5000"
-                               style="width: 100%; padding: 8px; border: 1px solid #dadce0; border-radius: 4px;">
-                    </div>
-                    <button type="submit" class="crawl-button auto" style="background: #1a73e8; color: white; width: 100%; padding: 12px; border: none; border-radius: 4px; cursor: pointer;">Iniciar Rastreo Automático</button>
-                </form>
-            </div>
-            
-            <div class="admin-card">
-                <h2>Rastreo Específico</h2>
-                <p style="color: #5f6368; font-size: 14px; margin-bottom: 15px;">Indexa un sitio web específico</p>
-                <form id="crawlSpecificForm" class="crawl-form">
-                    <input type="hidden" name="action" value="start_specific">
-                    <div style="margin-bottom: 10px;">
-                        <label style="display: block; margin-bottom: 5px; color: #5f6368;">URL del sitio:</label>
-                        <input type="url" 
-                               name="url" 
-                               placeholder="https://ejemplo.com" 
-                               class="crawl-input"
-                               style="width: 100%; padding: 8px; border: 1px solid #dadce0; border-radius: 4px;">
-                    </div>
-                    <div style="margin-bottom: 10px;">
-                        <label style="display: block; margin-bottom: 5px; color: #5f6368;">Páginas máximas:</label>
-                        <input type="number" 
-                               name="max_pages" 
-                               value="50" 
-                               class="crawl-pages"
-                               min="1" 
-                               max="500"
-                               style="width: 100%; padding: 8px; border: 1px solid #dadce0; border-radius: 4px;">
-                    </div>
-                    <button type="submit" class="crawl-button" style="background: #34a853; color: white; width: 100%; padding: 12px; border: none; border-radius: 4px; cursor: pointer;">Iniciar Rastreo Específico</button>
-                </form>
-            </div>
-            
-            <div class="admin-card">
-                <h2>Estado del Crawler</h2>
-                <div id="crawlerStatus" class="crawler-status">
-                    {% if crawler_status.running %}
-                        <div style="background: #e8f0fe; padding: 15px; border-radius: 8px;">
-                            <div style="display: flex; align-items: center; margin-bottom: 15px;">
-                                <span style="display: inline-block; width: 12px; height: 12px; background: #1a73e8; border-radius: 50%; margin-right: 10px; animation: pulse 1.5s infinite;"></span>
-                                <span style="color: #1a73e8; font-weight: 500;">{{ crawler_status.crawler_type|upper }} - Rastreando...</span>
-                            </div>
-                            <div style="margin-bottom: 15px;">
-                                <p style="margin: 5px 0;"><strong>URL actual:</strong> <span style="color: #1a73e8; word-break: break-all;">{{ crawler_status.current_url or 'N/A' }}</span></p>
-                                <p style="margin: 5px 0;"><strong>Páginas rastreadas:</strong> {{ crawler_status.pages_crawled }}</p>
-                                <p style="margin: 5px 0;"><strong>Dominios descubiertos:</strong> {{ crawler_status.domains_discovered or 0 }}</p>
-                                <p style="margin: 5px 0;"><strong>URLs en cola:</strong> {{ crawler_status.queue_size or 0 }}</p>
-                                <p style="margin: 5px 0;"><strong>Tiempo activo:</strong> <span id="tiempoActivo">calculando...</span></p>
-                            </div>
-                            <button onclick="detenerRastreo()" style="background: #d93025; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; width: 100%;">Detener Rastreo</button>
-                        </div>
-                    {% else %}
-                        <div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
-                            <div style="display: flex; align-items: center; margin-bottom: 10px;">
-                                <span style="display: inline-block; width: 12px; height: 12px; background: #5f6368; border-radius: 50%; margin-right: 10px;"></span>
-                                <span style="color: #5f6368;">Inactivo</span>
-                            </div>
-                            <p style="margin: 5px 0; color: #5f6368;"><strong>Último rastreo:</strong> {{ crawler_status.pages_crawled or 0 }} páginas</p>
-                            <p style="margin: 5px 0; color: #5f6368;"><strong>Último tipo:</strong> {{ crawler_status.crawler_type or 'N/A' }}</p>
-                        </div>
-                    {% endif %}
-                </div>
-            </div>
-            
-            <div class="admin-card">
-                <h2>Acciones</h2>
-                <div style="display: flex; flex-direction: column; gap: 10px;">
-                    <button onclick="limpiarIndex()" style="background: #d93025; color: white; border: none; padding: 10px; border-radius: 4px; cursor: pointer;">Limpiar Índice</button>
-                    <button onclick="verStats()" style="background: #1a73e8; color: white; border: none; padding: 10px; border-radius: 4px; cursor: pointer;">Ver Estadísticas</button>
-                    <button onclick="actualizarStatus()" style="background: #f8f9fa; color: #202124; border: 1px solid #dadce0; padding: 10px; border-radius: 4px; cursor: pointer;">Actualizar Estado</button>
-                    <button onclick="exportarDatos()" style="background: #34a853; color: white; border: none; padding: 10px; border-radius: 4px; cursor: pointer;">Exportar Datos</button>
-                </div>
-            </div>
-            
-            <div class="admin-card full-width">
-                <h2>Páginas Recientes</h2>
-                <div style="overflow-x: auto; max-height: 400px; overflow-y: auto;">
-                    {% if paginas_recientes %}
-                        <table style="width: 100%; border-collapse: collapse;">
-                            <thead style="position: sticky; top: 0; background: white;">
-                                <tr style="background: #f8f9fa;">
-                                    <th style="padding: 12px; text-align: left; border-bottom: 1px solid #dadce0;">Título</th>
-                                    <th style="padding: 12px; text-align: left; border-bottom: 1px solid #dadce0;">URL</th>
-                                    <th style="padding: 12px; text-align: left; border-bottom: 1px solid #dadce0;">Dominio</th>
-                                    <th style="padding: 12px; text-align: left; border-bottom: 1px solid #dadce0;">Fecha</th>
-                                    <th style="padding: 12px; text-align: left; border-bottom: 1px solid #dadce0;">Keywords</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for pagina in paginas_recientes %}
-                                    <tr>
-                                        <td style="padding: 12px; border-bottom: 1px solid #dadce0;">{{ pagina.title[:50] }}</td>
-                                        <td style="padding: 12px; border-bottom: 1px solid #dadce0;">
-                                            <a href="{{ pagina.url }}" target="_blank" style="color: #1a73e8; text-decoration: none;">{{ pagina.url[:40] }}...</a>
-                                        </td>
-                                        <td style="padding: 12px; border-bottom: 1px solid #dadce0;">{{ pagina.domain }}</td>
-                                        <td style="padding: 12px; border-bottom: 1px solid #dadce0;">{{ pagina.crawled_date[:10] }}</td>
-                                        <td style="padding: 12px; border-bottom: 1px solid #dadce0;">{{ pagina.keywords[:5]|join(', ') }}</td>
-                                    </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    {% else %}
-                        <p style="text-align: center; padding: 40px; color: #5f6368;">No hay páginas indexadas</p>
-                    {% endif %}
-                </div>
-            </div>
-            
-            <div class="admin-card full-width">
-                <h2>Dominios Indexados</h2>
-                <div style="overflow-x: auto; max-height: 300px; overflow-y: auto;">
-                    {% if domains %}
-                        <table style="width: 100%; border-collapse: collapse;">
-                            <thead style="position: sticky; top: 0; background: white;">
-                                <tr style="background: #f8f9fa;">
-                                    <th style="padding: 12px; text-align: left; border-bottom: 1px solid #dadce0;">Dominio</th>
-                                    <th style="padding: 12px; text-align: left; border-bottom: 1px solid #dadce0;">Páginas</th>
-                                    <th style="padding: 12px; text-align: left; border-bottom: 1px solid #dadce0;">Porcentaje</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for domain, info in domains.items() %}
-                                    <tr>
-                                        <td style="padding: 12px; border-bottom: 1px solid #dadce0;">{{ domain }}</td>
-                                        <td style="padding: 12px; border-bottom: 1px solid #dadce0;">{{ info.pages_count }}</td>
-                                        <td style="padding: 12px; border-bottom: 1px solid #dadce0;">
-                                            {% if stats.total_paginas > 0 %}
-                                                {{ "%.1f"|format((info.pages_count / stats.total_paginas * 100)) }}%
-                                            {% else %}
-                                                0%
-                                            {% endif %}
-                                        </td>
-                                    </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    {% else %}
-                        <p style="text-align: center; padding: 40px; color: #5f6368;">No hay dominios indexados</p>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-    </div>
-    
     <style>
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.5; }
-            100% { opacity: 1; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
         
-        @keyframes slideIn {
-            from { transform: translateY(-20px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
-        }
-        
-        .admin-container {
-            max-width: 1400px;
-            margin: 40px auto;
-            padding: 0 20px;
-            animation: slideIn 0.3s ease-out;
-        }
-        
-        .admin-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-            gap: 30px;
-        }
-        
-        .admin-card {
-            background: white;
-            border: 1px solid #dadce0;
-            border-radius: 8px;
-            padding: 24px;
-            transition: box-shadow 0.3s ease;
-        }
-        
-        .admin-card:hover {
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-        }
-        
-        .admin-card.full-width {
-            grid-column: 1 / -1;
-        }
-        
-        .admin-card h2 {
-            font-size: 18px;
-            font-weight: 500;
-            margin-bottom: 20px;
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #f8f9fa;
             color: #202124;
         }
         
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 20px;
-            margin-bottom: 20px;
-        }
-        
-        .stat-card {
-            text-align: center;
-        }
-        
-        .stat-value {
-            font-size: 32px;
-            font-weight: 500;
-            color: #1a73e8;
-        }
-        
-        .stat-label {
-            color: #5f6368;
-            font-size: 12px;
-        }
-        
         .admin-header {
-            background: #1a73e8;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             padding: 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
         
         .header-content {
@@ -318,80 +49,544 @@
             font-weight: 400;
         }
         
+        .admin-container {
+            max-width: 1400px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+        
+        .admin-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 30px;
+        }
+        
+        .admin-card {
+            background: white;
+            border: 1px solid #dadce0;
+            border-radius: 16px;
+            padding: 24px;
+            transition: all 0.3s;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        }
+        
+        .admin-card:hover {
+            box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+        }
+        
+        .admin-card.full-width {
+            grid-column: 1 / -1;
+        }
+        
+        .admin-card h2 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #202124;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 32px;
+            font-weight: 600;
+            color: #667eea;
+        }
+        
+        .stat-label {
+            color: #5f6368;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+        
+        .stats-info {
+            color: #5f6368;
+            font-size: 13px;
+            border-top: 1px solid #dadce0;
+            padding-top: 20px;
+        }
+        
+        .crawl-form {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .crawl-input, .crawl-pages {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #dadce0;
+            border-radius: 8px;
+            font-size: 14px;
+            outline: none;
+            transition: all 0.2s;
+        }
+        
+        .crawl-input:focus, .crawl-pages:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102,126,234,0.1);
+        }
+        
         .crawl-button {
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
         }
         
         .crawl-button:hover {
+            background: #5a6fd8;
             transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            box-shadow: 0 4px 12px rgba(102,126,234,0.3);
         }
         
-        .crawl-button:active {
-            transform: translateY(0);
+        .crawl-button.auto {
+            background: #1a73e8;
         }
         
-        table tr:hover {
+        .crawl-status {
+            margin-top: 15px;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        
+        .actions {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .action-button {
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+        
+        .action-button.clear {
+            background: #d93025;
+            color: white;
+        }
+        
+        .action-button.stats {
+            background: #1a73e8;
+            color: white;
+        }
+        
+        .action-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        th {
+            text-align: left;
+            padding: 12px;
+            background: #f8f9fa;
+            color: #5f6368;
+            font-weight: 600;
+            font-size: 13px;
+            border-bottom: 1px solid #dadce0;
+            position: sticky;
+            top: 0;
+            background: white;
+        }
+        
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #dadce0;
+            font-size: 14px;
+        }
+        
+        tr:hover {
             background: #f8f9fa;
         }
         
-        ::-webkit-scrollbar {
-            width: 8px;
-            height: 8px;
+        a {
+            color: #667eea;
+            text-decoration: none;
         }
         
-        ::-webkit-scrollbar-track {
-            background: #f1f1f1;
-            border-radius: 4px;
+        a:hover {
+            text-decoration: underline;
         }
         
-        ::-webkit-scrollbar-thumb {
-            background: #888;
-            border-radius: 4px;
+        .status-running {
+            background: #e8f0fe;
+            padding: 15px;
+            border-radius: 8px;
+            animation: pulse 2s infinite;
         }
         
-        ::-webkit-scrollbar-thumb:hover {
-            background: #555;
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.8; }
+            100% { opacity: 1; }
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+        
+        .status-indicator.running {
+            background: #1a73e8;
+            animation: blink 1s infinite;
+        }
+        
+        .status-indicator.idle {
+            background: #5f6368;
+        }
+        
+        @keyframes blink {
+            0% { opacity: 1; }
+            50% { opacity: 0.3; }
+            100% { opacity: 1; }
+        }
+        
+        .cache-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        .cache-stat-item {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        .cache-stat-value {
+            font-size: 24px;
+            font-weight: 600;
+            color: #667eea;
+        }
+        
+        .cache-stat-label {
+            font-size: 12px;
+            color: #5f6368;
+            margin-top: 5px;
+        }
+        
+        .description {
+            color: #5f6368;
+            font-size: 14px;
+            margin-bottom: 15px;
+            line-height: 1.5;
         }
     </style>
+</head>
+<body>
+    <div class="admin-header">
+        <div class="header-content">
+            <a href="/" class="admin-logo">Buscador<span>.local</span></a>
+            <span class="admin-title">Panel de Administración</span>
+        </div>
+    </div>
+    
+    <div class="admin-container">
+        <div class="admin-grid">
+            <div class="admin-card">
+                <h2>📊 Estadísticas</h2>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value">{{ stats.total_paginas }}</div>
+                        <div class="stat-label">Páginas</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">{{ stats.total_keywords }}</div>
+                        <div class="stat-label">Keywords</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">{{ stats.total_domains }}</div>
+                        <div class="stat-label">Dominios</div>
+                    </div>
+                </div>
+                <div class="stats-info">
+                    <p><strong>Última actualización:</strong> {{ stats.last_update or 'Nunca' }}</p>
+                    <p><strong>Creado:</strong> {{ stats.created[:10] if stats.created else 'N/A' }}</p>
+                </div>
+            </div>
+            
+            <div class="admin-card">
+                <h2>📦 Estadísticas de Caché</h2>
+                <div id="cacheStats">
+                    <div class="cache-stats">
+                        <div class="cache-stat-item">
+                            <div class="cache-stat-value" id="cacheTotal">0</div>
+                            <div class="cache-stat-label">Páginas en caché</div>
+                        </div>
+                        <div class="cache-stat-item">
+                            <div class="cache-stat-value" id="cacheSize">0 MB</div>
+                            <div class="cache-stat-label">Tamaño</div>
+                        </div>
+                        <div class="cache-stat-item">
+                            <div class="cache-stat-value" id="cacheHitRatio">0%</div>
+                            <div class="cache-stat-label">Hit ratio</div>
+                        </div>
+                        <div class="cache-stat-item">
+                            <div class="cache-stat-value" id="cacheHits">0</div>
+                            <div class="cache-stat-label">Hits</div>
+                        </div>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 10px; margin-top: 20px;">
+                    <button onclick="actualizarCacheStats()" class="action-button stats" style="flex: 1;">
+                        Actualizar
+                    </button>
+                    <button onclick="limpiarCacheManual()" class="action-button clear" style="flex: 1;">
+                        Limpiar Caché
+                    </button>
+                </div>
+            </div>
+            
+            <div class="admin-card">
+                <h2>🚀 CRAWLER INFINITO</h2>
+                <p class="description">
+                    ⚡ <strong>NUNCA SE DETIENE</strong> - Va de web en web automáticamente<br>
+                    🔗 Auto-descubrimiento de nuevos dominios<br>
+                    📈 Expansión constante - Modo autoalimentado
+                </p>
+                <form id="crawlInfiniteForm" class="crawl-form">
+                    <input type="hidden" name="action" value="start_infinite">
+                    <div style="margin-bottom: 10px;">
+                        <label style="display: block; margin-bottom: 5px; color: #5f6368;">User Agent:</label>
+                        <select name="user_agent" class="crawl-input">
+                            <option value="chrome">Chrome</option>
+                            <option value="firefox">Firefox</option>
+                            <option value="safari">Safari</option>
+                            <option value="iphone">iPhone</option>
+                            <option value="android">Android</option>
+                            <option value="bot">Googlebot</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="crawl-button" style="background: #d93025;">
+                        🚀 INICIAR CRAWLER INFINITO
+                    </button>
+                </form>
+            </div>
+            
+            <div class="admin-card">
+                <h2>🌍 Rastreo Automático</h2>
+                <p class="description">El crawler buscará sitios web automáticamente desde nuestra lista de semillas</p>
+                <form id="crawlAutoForm" class="crawl-form">
+                    <input type="hidden" name="action" value="start_auto">
+                    <div style="margin-bottom: 10px;">
+                        <label style="display: block; margin-bottom: 5px; color: #5f6368;">User Agent:</label>
+                        <select name="user_agent" class="crawl-input">
+                            <option value="chrome">Chrome</option>
+                            <option value="firefox">Firefox</option>
+                            <option value="safari">Safari</option>
+                            <option value="iphone">iPhone</option>
+                            <option value="android">Android</option>
+                            <option value="bot">Googlebot</option>
+                        </select>
+                    </div>
+                    <div style="margin-bottom: 10px;">
+                        <label style="display: block; margin-bottom: 5px; color: #5f6368;">Páginas máximas:</label>
+                        <input type="number" name="max_pages" value="500" class="crawl-input" min="10" max="5000">
+                    </div>
+                    <button type="submit" class="crawl-button auto">Iniciar Rastreo Automático</button>
+                </form>
+            </div>
+            
+            <div class="admin-card">
+                <h2>🔗 Rastreo Específico</h2>
+                <p class="description">Indexa un sitio web específico</p>
+                <form id="crawlSpecificForm" class="crawl-form">
+                    <input type="hidden" name="action" value="start_specific">
+                    <div style="margin-bottom: 10px;">
+                        <label style="display: block; margin-bottom: 5px; color: #5f6368;">User Agent:</label>
+                        <select name="user_agent" class="crawl-input">
+                            <option value="chrome">Chrome</option>
+                            <option value="firefox">Firefox</option>
+                            <option value="safari">Safari</option>
+                            <option value="iphone">iPhone</option>
+                            <option value="android">Android</option>
+                            <option value="bot">Googlebot</option>
+                        </select>
+                    </div>
+                    <div style="margin-bottom: 10px;">
+                        <label style="display: block; margin-bottom: 5px; color: #5f6368;">URL:</label>
+                        <input type="url" name="url" placeholder="https://ejemplo.com" class="crawl-input">
+                    </div>
+                    <div style="margin-bottom: 10px;">
+                        <label style="display: block; margin-bottom: 5px; color: #5f6368;">Páginas máximas:</label>
+                        <input type="number" name="max_pages" value="50" class="crawl-input" min="1" max="500">
+                    </div>
+                    <button type="submit" class="crawl-button" style="background: #34a853;">Iniciar Rastreo Específico</button>
+                </form>
+            </div>
+            
+            <div class="admin-card">
+                <h2>📡 Estado del Crawler</h2>
+                <div id="crawlerStatus" class="crawler-status">
+                    {% if crawler_status.running %}
+                        <div class="status-running">
+                            <div style="display: flex; align-items: center; margin-bottom: 15px;">
+                                <span class="status-indicator running"></span>
+                                <span style="color: #1a73e8; font-weight: 500;">{{ crawler_status.crawler_type|upper }} - Rastreando...</span>
+                            </div>
+                            <div style="margin-bottom: 15px;">
+                                <p style="margin: 5px 0;"><strong>URL actual:</strong> <span style="color: #1a73e8; word-break: break-all;">{{ crawler_status.current_url or 'N/A' }}</span></p>
+                                <p style="margin: 5px 0;"><strong>Páginas rastreadas:</strong> {{ crawler_status.pages_crawled }}</p>
+                                <p style="margin: 5px 0;"><strong>Dominios:</strong> {{ crawler_status.domains_discovered or 0 }}</p>
+                                <p style="margin: 5px 0;"><strong>Cola:</strong> {{ crawler_status.queue_size or 0 }}</p>
+                                <p style="margin: 5px 0;"><strong>User Agent:</strong> {{ crawler_status.user_agent or 'N/A' }}</p>
+                            </div>
+                            <button onclick="detenerRastreo()" class="action-button clear" style="width: 100%;">Detener Rastreo</button>
+                        </div>
+                    {% else %}
+                        <div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
+                            <div style="display: flex; align-items: center; margin-bottom: 10px;">
+                                <span class="status-indicator idle"></span>
+                                <span style="color: #5f6368;">Inactivo</span>
+                            </div>
+                            <p style="margin: 5px 0; color: #5f6368;"><strong>Último rastreo:</strong> {{ crawler_status.pages_crawled or 0 }} páginas</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="admin-card">
+                <h2>⚙️ Acciones</h2>
+                <div class="actions">
+                    <button onclick="limpiarIndex()" class="action-button clear">Limpiar Índice</button>
+                    <button onclick="verStats()" class="action-button stats">Ver Estadísticas</button>
+                    <button onclick="actualizarStatus()" class="action-button" style="background: #f8f9fa; border: 1px solid #dadce0;">Actualizar Estado</button>
+                </div>
+            </div>
+            
+            <div class="admin-card full-width">
+                <h2>📄 Páginas Recientes</h2>
+                <div style="overflow-x: auto; max-height: 400px; overflow-y: auto;">
+                    {% if paginas_recientes %}
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Título</th>
+                                    <th>URL</th>
+                                    <th>Dominio</th>
+                                    <th>Fecha</th>
+                                    <th>Keywords</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for pagina in paginas_recientes %}
+                                    <tr>
+                                        <td>{{ pagina.title[:50] }}</td>
+                                        <td><a href="{{ pagina.url }}" target="_blank">{{ pagina.url[:40] }}...</a></td>
+                                        <td>{{ pagina.domain }}</td>
+                                        <td>{{ pagina.crawled_date[:10] }}</td>
+                                        <td>{{ pagina.keywords[:5]|join(', ') }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    {% else %}
+                        <p style="text-align: center; padding: 40px; color: #5f6368;">No hay páginas indexadas</p>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="admin-card full-width">
+                <h2>🌐 Dominios Indexados</h2>
+                <div style="overflow-x: auto; max-height: 300px; overflow-y: auto;">
+                    {% if domains %}
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Dominio</th>
+                                    <th>Páginas</th>
+                                    <th>Último rastreo</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for domain, info in domains.items() %}
+                                    <tr>
+                                        <td>{{ domain }}</td>
+                                        <td>{{ info.pages_count }}</td>
+                                        <td>{{ info.last_crawled[:10] if info.last_crawled else 'N/A' }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    {% else %}
+                        <p style="text-align: center; padding: 40px; color: #5f6368;">No hay dominios indexados</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
     
     <script>
-        // Calcular tiempo activo
-        function calcularTiempoActivo() {
-            {% if crawler_status.running and crawler_status.start_time %}
-                const startTime = {{ crawler_status.start_time }} * 1000;
-                const ahora = new Date().getTime();
-                const diferencia = ahora - startTime;
-                
-                const minutos = Math.floor(diferencia / 60000);
-                const segundos = Math.floor((diferencia % 60000) / 1000);
-                const horas = Math.floor(minutos / 60);
-                const minutosRestantes = minutos % 60;
-                
-                let tiempoTexto = '';
-                if (horas > 0) {
-                    tiempoTexto = horas + ' horas ' + minutosRestantes + ' minutos ' + segundos + ' segundos';
-                } else if (minutos > 0) {
-                    tiempoTexto = minutos + ' minutos ' + segundos + ' segundos';
-                } else {
-                    tiempoTexto = segundos + ' segundos';
+        // Funciones de caché
+        function actualizarCacheStats() {
+            fetch('/cache_stats')
+            .then(response => response.json())
+            .then(data => {
+                if (!data.error) {
+                    document.getElementById('cacheTotal').textContent = data.total_cached || 0;
+                    document.getElementById('cacheSize').textContent = (data.total_size_mb || 0) + ' MB';
+                    document.getElementById('cacheHitRatio').textContent = (data.hit_ratio || 0) + '%';
+                    document.getElementById('cacheHits').textContent = data.cache_hits || 0;
                 }
-                
-                document.getElementById('tiempoActivo').textContent = tiempoTexto;
-            {% endif %}
+            })
+            .catch(error => console.error('Error:', error));
         }
         
-        // Actualizar cada segundo
-        {% if crawler_status.running %}
-            setInterval(calcularTiempoActivo, 1000);
-        {% endif %}
+        function limpiarCacheManual() {
+            const dias = prompt('¿Eliminar caché de más de cuántos días? (30 por defecto)', '30');
+            if (dias) {
+                fetch('/limpiar_cache', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ max_days: parseInt(dias) })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    alert(data.message);
+                    actualizarCacheStats();
+                });
+            }
+        }
         
-        // CRAWLER INFINITO - NUEVO
+        // Rastreo infinito
         document.getElementById('crawlInfiniteForm').addEventListener('submit', function(e) {
             e.preventDefault();
             const formData = new FormData(this);
             
-            if (confirm('🚀 INICIAR CRAWLER INFINITO\n\n⚠️ ADVERTENCIA:\n\n• El crawler NUNCA SE DETENDRÁ automáticamente\n• Irá de web en web descubriendo nuevos sitios\n• Indexará páginas hasta que lo detengas manualmente\n• El índice puede crecer muy rápidamente\n\n¿Estás seguro de iniciar el modo infinito?')) {
+            if (confirm('🚀 INICIAR CRAWLER INFINITO\n\n⚠️ El crawler NUNCA SE DETENDRÁ automáticamente\n¿Estás seguro?')) {
                 fetch('/crawl', {
                     method: 'POST',
                     body: formData
@@ -401,65 +596,61 @@
                     if (data.error) {
                         alert('❌ Error: ' + data.error);
                     } else {
-                        alert('✅ ' + data.message + '\n\n' + (data.description || ''));
+                        alert('✅ ' + data.message);
                         setTimeout(() => location.reload(), 1000);
                     }
                 })
                 .catch(error => {
-                    alert('❌ Error al iniciar el crawler infinito');
+                    alert('❌ Error al iniciar');
                 });
             }
         });
         
-        // Rastreo Automático
-        if (document.getElementById('crawlAutoForm')) {
-            document.getElementById('crawlAutoForm').addEventListener('submit', function(e) {
-                e.preventDefault();
-                const formData = new FormData(this);
-                
-                fetch('/crawl', {
-                    method: 'POST',
-                    body: formData
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) {
-                        alert('❌ Error: ' + data.error);
-                    } else {
-                        alert('✅ ' + data.message);
-                        setTimeout(() => location.reload(), 1000);
-                    }
-                })
-                .catch(error => {
-                    alert('❌ Error al iniciar el rastreo');
-                });
+        // Rastreo automático
+        document.getElementById('crawlAutoForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            
+            fetch('/crawl', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert('❌ Error: ' + data.error);
+                } else {
+                    alert('✅ ' + data.message);
+                    setTimeout(() => location.reload(), 1000);
+                }
+            })
+            .catch(error => {
+                alert('❌ Error al iniciar');
             });
-        }
+        });
         
-        // Rastreo Específico
-        if (document.getElementById('crawlSpecificForm')) {
-            document.getElementById('crawlSpecificForm').addEventListener('submit', function(e) {
-                e.preventDefault();
-                const formData = new FormData(this);
-                
-                fetch('/crawl', {
-                    method: 'POST',
-                    body: formData
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) {
-                        alert('❌ Error: ' + data.error);
-                    } else {
-                        alert('✅ ' + data.message);
-                        setTimeout(() => location.reload(), 1000);
-                    }
-                })
-                .catch(error => {
-                    alert('❌ Error al iniciar el rastreo');
-                });
+        // Rastreo específico
+        document.getElementById('crawlSpecificForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            
+            fetch('/crawl', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert('❌ Error: ' + data.error);
+                } else {
+                    alert('✅ ' + data.message);
+                    setTimeout(() => location.reload(), 1000);
+                }
+            })
+            .catch(error => {
+                alert('❌ Error al iniciar');
             });
-        }
+        });
         
         function detenerRastreo() {
             if (confirm('¿Detener el rastreo actual?')) {
@@ -476,13 +667,13 @@
                     location.reload();
                 })
                 .catch(error => {
-                    alert('❌ Error al detener el rastreo');
+                    alert('❌ Error al detener');
                 });
             }
         }
         
         function limpiarIndex() {
-            if (confirm('⚠️ LIMPIAR ÍNDICE\n\n¿Estás seguro de limpiar todo el índice?\nEsta acción no se puede deshacer.\n\nSe eliminarán todas las páginas indexadas.')) {
+            if (confirm('⚠️ LIMPIAR ÍNDICE\n\n¿Estás seguro? Esta acción no se puede deshacer.')) {
                 fetch('/clear', { method: 'POST' })
                 .then(response => response.json())
                 .then(data => {
@@ -490,7 +681,7 @@
                     location.reload();
                 })
                 .catch(error => {
-                    alert('❌ Error al limpiar el índice');
+                    alert('❌ Error al limpiar');
                 });
             }
         }
@@ -499,17 +690,12 @@
             fetch('/stats')
             .then(response => response.json())
             .then(data => {
-                let mensaje = '📊 ESTADÍSTICAS COMPLETAS:\n\n';
-                mensaje += '📄 Páginas totales: ' + (data.total_paginas || 0) + '\n';
-                mensaje += '🔑 Keywords totales: ' + (data.total_keywords || 0) + '\n';
-                mensaje += '🌍 Dominios totales: ' + (data.total_domains || 0) + '\n';
-                mensaje += '📅 Última actualización: ' + (data.last_update || 'Nunca') + '\n';
-                mensaje += '🕐 Creado: ' + (data.created || 'N/A');
-                
+                let mensaje = '📊 ESTADÍSTICAS:\n\n';
+                mensaje += '📄 Páginas: ' + data.total_paginas + '\n';
+                mensaje += '🔑 Keywords: ' + data.total_keywords + '\n';
+                mensaje += '🌍 Dominios: ' + data.total_domains + '\n';
+                mensaje += '📅 Última actualización: ' + (data.last_update || 'Nunca');
                 alert(mensaje);
-            })
-            .catch(error => {
-                alert('❌ Error al obtener estadísticas');
             });
         }
         
@@ -523,35 +709,22 @@
             })
             .then(response => response.json())
             .then(data => {
-                let mensaje = '🔄 ESTADO DEL CRAWLER:\n\n';
-                
                 if (data.running) {
-                    mensaje += '✅ Estado: ACTIVO\n';
-                    mensaje += '🔄 Tipo: ' + (data.crawler_type || 'N/A') + '\n';
-                    mensaje += '📄 Páginas: ' + (data.pages_crawled || 0) + '\n';
-                    mensaje += '🌍 Dominios: ' + (data.domains_discovered || 0) + '\n';
-                    mensaje += '⏳ Cola: ' + (data.queue_size || 0) + ' URLs\n';
-                    mensaje += '🔗 URL actual: ' + (data.current_url || 'N/A');
+                    alert('🔄 Estado: ACTIVO\nPáginas: ' + data.pages_crawled);
                 } else {
-                    mensaje += '⏹️ Estado: INACTIVO\n';
-                    mensaje += '📄 Últimas páginas: ' + (data.pages_crawled || 0);
+                    alert('⏹️ Estado: INACTIVO');
                 }
-                
-                alert(mensaje);
-            })
-            .catch(error => {
-                alert('❌ Error al obtener estado');
             });
         }
         
-        function exportarDatos() {
-            alert('📥 Función de exportación próximamente disponible');
-        }
-        
-        // Auto-refresh cada 5 segundos si está rastreando
+        // Auto-refresh si está rastreando
         {% if crawler_status.running %}
             setTimeout(() => location.reload(), 5000);
         {% endif %}
+        
+        // Actualizar caché cada 30 segundos
+        setInterval(actualizarCacheStats, 30000);
+        actualizarCacheStats();
     </script>
 </body>
 </html>
