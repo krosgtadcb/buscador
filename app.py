@@ -5,9 +5,6 @@ import threading
 import time
 import requests
 from datetime import datetime
-import socket
-import subprocess
-import platform
 import urllib.parse
 import re
 
@@ -34,8 +31,7 @@ USER_AGENTS = {
     'edge': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0',
     'iphone': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Mobile/15E148 Safari/604.1',
     'android': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
-    'bot': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
-    'custom': ''  # Para user agent personalizado
+    'bot': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'
 }
 
 @app.context_processor
@@ -57,19 +53,16 @@ def search():
     if not query:
         return redirect(url_for('index'))
     
-    # Primero buscar en índice local
+    # Buscar en índice local
     resultados, total = indexador.buscar(query, page)
-    
-    # Si no hay resultados, buscar en internet
-    buscar_en_internet = request.args.get('search_web', 'false') == 'true'
+    total_paginas = (total + 9) // 10 if total > 0 else 0
     
     return render_template('resultados.html', 
                          query=query,
                          resultados=resultados,
                          total=total,
                          page=page,
-                         total_paginas=(total + 9) // 10,
-                         buscar_en_internet=buscar_en_internet,
+                         total_paginas=total_paginas,
                          user_agent=user_agent)
 
 @app.route('/abrir_url', methods=['POST'])
@@ -78,7 +71,7 @@ def abrir_url():
     data = request.json
     url = data.get('url', '').strip()
     user_agent_key = data.get('user_agent', 'chrome')
-    indexar = data.get('indexar', True)  # Por defecto, indexar la página
+    indexar = data.get('indexar', True)
     
     if not url:
         return jsonify({'error': 'URL no válida'}), 400
@@ -94,23 +87,26 @@ def abrir_url():
         response = requests.head(url, headers=headers, timeout=5, allow_redirects=True)
         
         if response.status_code < 400:
-            # Si se solicita indexar, añadir al crawler
-            if indexar:
+            # Si se solicita indexar y no está ya indexada
+            if indexar and not indexador.url_esta_indexada(url):
                 def indexar_url_task():
                     crawler = WebCrawler(max_pages=1, user_agent_key=user_agent_key)
-                    resultado = crawler.crawl_page(url)
+                    resultado = crawler.crawl_page(url, force_refresh=True)
                     if resultado['success'] and resultado['page_info']:
                         indexador.agregar_paginas({url: resultado['page_info']})
                 
                 thread = threading.Thread(target=indexar_url_task)
                 thread.daemon = True
                 thread.start()
+                mensaje_indexado = " (añadiendo al índice...)"
+            else:
+                mensaje_indexado = " (ya estaba en el índice)" if indexador.url_esta_indexada(url) else ""
             
             return jsonify({
                 'success': True,
                 'url': url,
                 'status_code': response.status_code,
-                'message': 'URL válida, abriendo...',
+                'message': f'URL válida, abriendo...{mensaje_indexado}',
                 'indexada': indexar
             })
         else:
@@ -126,6 +122,198 @@ def abrir_url():
         return jsonify({'success': False, 'error': 'Timeout al conectar'}), 400
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 400
+
+@app.route('/buscar_en_internet', methods=['POST'])
+def buscar_en_internet():
+    """Busca una consulta en internet y añade resultados al índice - CORREGIDO"""
+    data = request.json
+    query = data.get('query', '')
+    user_agent_key = data.get('user_agent', 'chrome')
+    
+    if not query:
+        return jsonify({'error': 'Consulta vacía'}), 400
+    
+    user_agent = USER_AGENTS.get(user_agent_key, USER_AGENTS['chrome'])
+    
+    try:
+        # Usar múltiples motores de búsqueda para mayor probabilidad de éxito
+        resultados_totales = []
+        
+        # 1. Intentar con Google
+        try:
+            search_url = f"https://www.google.com/search?q={urllib.parse.quote(query)}&hl=es"
+            headers = {
+                'User-Agent': user_agent,
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
+                'Cache-Control': 'no-cache'
+            }
+            
+            response = requests.get(search_url, headers=headers, timeout=10)
+            
+            if response.status_code == 200:
+                from bs4 import BeautifulSoup
+                soup = BeautifulSoup(response.text, 'html.parser')
+                
+                # Google actual - múltiples selectores para adaptarse a cambios
+                selectores = [
+                    'div.g',
+                    'div.yuRUbf',
+                    'div.tF2Cxc',
+                    'div[jsname="UWckNb"]'
+                ]
+                
+                for selector in selectores:
+                    resultados = soup.select(selector)
+                    if resultados:
+                        break
+                
+                for result in resultados[:10]:
+                    # Título
+                    title_elem = (result.select_one('h3') or 
+                                 result.select_one('a > h3') or
+                                 result.select_one('div[role="heading"]'))
+                    
+                    # Enlace
+                    link_elem = result.select_one('a[href]')
+                    
+                    # Descripción
+                    desc_elem = (result.select_one('div.VwiC3b') or 
+                                result.select_one('div.IsZvec') or
+                                result.select_one('div[style*="color:#4d5156"]'))
+                    
+                    if title_elem and link_elem:
+                        title = title_elem.get_text().strip()
+                        url = link_elem.get('href', '')
+                        
+                        # Extraer URL real de Google
+                        if url.startswith('/url?q='):
+                            url = url.split('/url?q=')[1].split('&')[0]
+                        elif url.startswith('http'):
+                            pass
+                        else:
+                            continue
+                        
+                        description = desc_elem.get_text().strip() if desc_elem else ''
+                        
+                        if url.startswith('http'):
+                            resultados_totales.append({
+                                'title': title,
+                                'url': url,
+                                'description': description[:200],
+                                'source': 'Google'
+                            })
+        except Exception as e:
+            print(f"Error con Google: {e}")
+        
+        # 2. Si Google falla, intentar con DuckDuckGo
+        if len(resultados_totales) < 3:
+            try:
+                ddg_url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(query)}"
+                response = requests.get(ddg_url, headers=headers, timeout=10)
+                
+                if response.status_code == 200:
+                    from bs4 import BeautifulSoup
+                    soup = BeautifulSoup(response.text, 'html.parser')
+                    
+                    for result in soup.select('.result')[:10]:
+                        title_elem = result.select_one('.result__a')
+                        link_elem = result.select_one('.result__url')
+                        desc_elem = result.select_one('.result__snippet')
+                        
+                        if title_elem and link_elem:
+                            title = title_elem.get_text().strip()
+                            url = link_elem.get('href', '')
+                            description = desc_elem.get_text().strip() if desc_elem else ''
+                            
+                            if url.startswith('http'):
+                                resultados_totales.append({
+                                    'title': title,
+                                    'url': url,
+                                    'description': description[:200],
+                                    'source': 'DuckDuckGo'
+                                })
+            except Exception as e:
+                print(f"Error con DuckDuckGo: {e}")
+        
+        # 3. Si aún no hay resultados, intentar con Bing
+        if len(resultados_totales) < 3:
+            try:
+                bing_url = f"https://www.bing.com/search?q={urllib.parse.quote(query)}"
+                response = requests.get(bing_url, headers=headers, timeout=10)
+                
+                if response.status_code == 200:
+                    from bs4 import BeautifulSoup
+                    soup = BeautifulSoup(response.text, 'html.parser')
+                    
+                    for result in soup.select('.b_algo')[:10]:
+                        title_elem = result.select_one('h2 a')
+                        desc_elem = result.select_one('.b_caption p')
+                        
+                        if title_elem:
+                            title = title_elem.get_text().strip()
+                            url = title_elem.get('href', '')
+                            description = desc_elem.get_text().strip() if desc_elem else ''
+                            
+                            if url.startswith('http'):
+                                resultados_totales.append({
+                                    'title': title,
+                                    'url': url,
+                                    'description': description[:200],
+                                    'source': 'Bing'
+                                })
+            except Exception as e:
+                print(f"Error con Bing: {e}")
+        
+        # Eliminar duplicados por URL
+        urls_vistas = set()
+        resultados_unicos = []
+        for r in resultados_totales:
+            if r['url'] not in urls_vistas:
+                urls_vistas.add(r['url'])
+                resultados_unicos.append(r)
+        
+        if not resultados_unicos:
+            return jsonify({
+                'success': False,
+                'error': 'No se encontraron resultados en ningún buscador',
+                'resultados': [],
+                'indexadas': 0
+            })
+        
+        # Crawlear las primeras 5 URLs encontradas (solo las que no están ya indexadas)
+        crawler = WebCrawler(max_pages=5, user_agent_key=user_agent_key)
+        paginas_indexadas = {}
+        indexadas_count = 0
+        
+        for resultado in resultados_unicos[:5]:
+            url = resultado['url']
+            if not indexador.url_esta_indexada(url):
+                try:
+                    print(f"Indexando: {url}")
+                    page_result = crawler.crawl_page(url, force_refresh=True)
+                    if page_result['success'] and page_result['page_info']:
+                        paginas_indexadas[url] = page_result['page_info']
+                        indexadas_count += 1
+                        print(f"✓ Indexada: {url}")
+                except Exception as e:
+                    print(f"Error indexando {url}: {e}")
+            else:
+                print(f"Ya indexada: {url}")
+        
+        # Añadir al índice
+        if paginas_indexadas:
+            indexador.agregar_paginas(paginas_indexadas)
+        
+        return jsonify({
+            'success': True,
+            'resultados': resultados_unicos[:10],
+            'indexadas': indexadas_count
+        })
+        
+    except Exception as e:
+        print(f"Error general en búsqueda: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/proxy')
 def proxy():
@@ -147,28 +335,21 @@ def proxy():
             'Upgrade-Insecure-Requests': '1'
         }
         
-        # Hacer la petición
         response = requests.get(url, headers=headers, timeout=10, stream=True)
         
-        # Determinar el tipo de contenido
         content_type = response.headers.get('Content-Type', '').lower()
         
-        # Si es un recurso estático (CSS, JS, imagen, etc.), devolverlo directamente
         if 'text/html' not in content_type:
-            # Devolver el contenido directamente con los headers correctos
             excluded_headers = ['content-encoding', 'content-length', 'transfer-encoding', 'connection']
             headers = [(name, value) for (name, value) in response.raw.headers.items()
                       if name.lower() not in excluded_headers]
-            
             response_content = response.content
             return (response_content, response.status_code, headers)
         
-        # Es HTML, procesarlo
         from bs4 import BeautifulSoup
         soup = BeautifulSoup(response.text, 'html.parser')
-        base_url = '/'.join(url.split('/')[:3])  # http://dominio.com
+        base_url = '/'.join(url.split('/')[:3])
         
-        # Función para hacer URLs absolutas
         def make_absolute(src, base):
             if src.startswith('http'):
                 return src
@@ -177,36 +358,29 @@ def proxy():
             elif src.startswith('/'):
                 return base + src
             else:
-                # URL relativa
                 if url.endswith('/'):
                     return url + src
                 else:
                     return '/'.join(url.split('/')[:-1]) + '/' + src
         
-        # PROCESAR CSS - Modificar URLs dentro de los archivos CSS
         for link in soup.find_all('link', rel='stylesheet'):
             if link.get('href'):
                 original_href = link['href']
                 absolute_href = make_absolute(original_href, base_url)
-                # Cambiar a nuestro proxy para CSS
                 link['href'] = f"/proxy_recurso?url={urllib.parse.quote(absolute_href)}&ua={user_agent_key}"
         
-        # PROCESAR JAVASCRIPT
         for script in soup.find_all('script', src=True):
             if script.get('src'):
                 original_src = script['src']
                 absolute_src = make_absolute(original_src, base_url)
-                # Cambiar a nuestro proxy para JS
                 script['src'] = f"/proxy_recurso?url={urllib.parse.quote(absolute_src)}&ua={user_agent_key}"
         
-        # PROCESAR IMÁGENES
         for img in soup.find_all('img', src=True):
             if img.get('src'):
                 original_src = img['src']
                 absolute_src = make_absolute(original_src, base_url)
                 img['src'] = f"/proxy_recurso?url={urllib.parse.quote(absolute_src)}&ua={user_agent_key}"
         
-        # PROCESAR ENLACES (a href)
         for link in soup.find_all('a', href=True):
             href = link['href']
             if href.startswith('http') or href.startswith('//') or href.startswith('/'):
@@ -214,14 +388,12 @@ def proxy():
                 link['href'] = f"/proxy?url={urllib.parse.quote(absolute_href)}&ua={user_agent_key}"
                 link['target'] = "_parent"
         
-        # Añadir meta tag para viewport y otros
         meta_viewport = soup.new_tag('meta')
         meta_viewport['name'] = 'viewport'
         meta_viewport['content'] = 'width=device-width, initial-scale=1.0'
         if soup.head:
             soup.head.insert(0, meta_viewport)
         
-        # Añadir barra superior para navegación
         nav_bar = soup.new_tag('div')
         nav_bar['style'] = '''
             position: fixed; 
@@ -239,7 +411,6 @@ def proxy():
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         '''
         
-        # Botón volver
         back_button = soup.new_tag('button')
         back_button['onclick'] = 'parent.cerrarIframe()'
         back_button['style'] = '''
@@ -258,7 +429,6 @@ def proxy():
         back_button.string = '← Volver'
         nav_bar.append(back_button)
         
-        # URL actual
         url_span = soup.new_tag('span')
         url_span['style'] = '''
             flex: 1; 
@@ -274,7 +444,6 @@ def proxy():
         url_span.string = url
         nav_bar.append(url_span)
         
-        # Selector User Agent
         ua_select = soup.new_tag('select')
         ua_select['onchange'] = f"parent.cambiarUA(this.value, '{url}')"
         ua_select['style'] = '''
@@ -306,7 +475,6 @@ def proxy():
         
         nav_bar.append(ua_select)
         
-        # Botón indexar
         indexar_button = soup.new_tag('button')
         indexar_button['onclick'] = f"parent.indexarURL('{url}')"
         indexar_button['style'] = '''
@@ -326,19 +494,15 @@ def proxy():
         indexar_button.string = '📥 Indexar'
         nav_bar.append(indexar_button)
         
-        # Añadir al body
         if soup.body:
             soup.body.insert(0, nav_bar)
-            # Añadir padding-top y estilos base
             if soup.body.get('style'):
                 soup.body['style'] += '; padding-top: 70px !important; margin: 0 !important;'
             else:
                 soup.body['style'] = 'padding-top: 70px !important; margin: 0 !important;'
         
-        # Añadir script para manejar eventos
         script_tag = soup.new_tag('script')
         script_tag.string = '''
-            // Prevenir que los enlaces se abran en nueva pestaña
             document.addEventListener('click', function(e) {
                 const link = e.target.closest('a');
                 if (link && link.target === '_blank') {
@@ -349,7 +513,6 @@ def proxy():
                 }
             });
             
-            // Adaptar iframes
             window.addEventListener('load', function() {
                 const iframes = document.querySelectorAll('iframe');
                 iframes.forEach(iframe => {
@@ -445,10 +608,8 @@ def proxy_recurso():
         user_agent = USER_AGENTS.get(user_agent_key, USER_AGENTS['chrome'])
         headers = {'User-Agent': user_agent}
         
-        # Hacer la petición
         response = requests.get(url, headers=headers, timeout=10, stream=True)
         
-        # Devolver el contenido con los headers correctos
         excluded_headers = ['content-encoding', 'content-length', 'transfer-encoding', 'connection']
         headers = [(name, value) for (name, value) in response.raw.headers.items()
                   if name.lower() not in excluded_headers]
@@ -459,139 +620,12 @@ def proxy_recurso():
     except Exception as e:
         return f"Error cargando recurso: {str(e)}", 500
 
-@app.route('/buscar_en_internet', methods=['POST'])
-def buscar_en_internet():
-    """Busca una consulta en internet y añade resultados al índice"""
-    data = request.json
-    query = data.get('query', '')
-    user_agent_key = data.get('user_agent', 'chrome')
-    
-    if not query:
-        return jsonify({'error': 'Consulta vacía'}), 400
-    
-    user_agent = USER_AGENTS.get(user_agent_key, USER_AGENTS['chrome'])
-    
-    try:
-        # Buscar en Google
-        search_url = f"https://www.google.com/search?q={urllib.parse.quote(query)}"
-        headers = {'User-Agent': user_agent}
-        
-        response = requests.get(search_url, headers=headers, timeout=10)
-        
-        if response.status_code == 200:
-            from bs4 import BeautifulSoup
-            soup = BeautifulSoup(response.text, 'html.parser')
-            
-            # Extraer resultados de Google
-            resultados = []
-            for result in soup.select('div.g'):
-                title_elem = result.select_one('h3')
-                link_elem = result.select_one('a')
-                desc_elem = result.select_one('div.VwiC3b')
-                
-                if title_elem and link_elem:
-                    title = title_elem.text
-                    url = link_elem.get('href', '')
-                    if url.startswith('/url?q='):
-                        url = url.split('/url?q=')[1].split('&')[0]
-                    
-                    description = desc_elem.text if desc_elem else ''
-                    
-                    resultados.append({
-                        'title': title,
-                        'url': url,
-                        'description': description
-                    })
-            
-            # Crawlear las primeras 5 URLs encontradas
-            crawler = WebCrawler(max_pages=5, user_agent_key=user_agent_key)
-            paginas_indexadas = {}
-            
-            for resultado in resultados[:5]:
-                try:
-                    page_result = crawler.crawl_page(resultado['url'])
-                    if page_result['success'] and page_result['page_info']:
-                        paginas_indexadas[resultado['url']] = page_result['page_info']
-                except:
-                    continue
-            
-            # Añadir al índice
-            if paginas_indexadas:
-                indexador.agregar_paginas(paginas_indexadas)
-            
-            return jsonify({
-                'success': True,
-                'resultados': resultados[:10],
-                'indexadas': len(paginas_indexadas)
-            })
-        
-        return jsonify({'error': 'No se pudo buscar en internet'}), 500
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/ping', methods=['POST'])
-def ping_test():
-    """Realiza test de ping a un dominio"""
-    data = request.json
-    url = data.get('url', '')
-    
-    try:
-        # Extraer dominio
-        from urllib.parse import urlparse
-        parsed = urlparse(url)
-        domain = parsed.netloc or url
-        
-        # Hacer ping
-        param = '-n' if platform.system().lower() == 'windows' else '-c'
-        command = ['ping', param, '4', domain]
-        
-        result = subprocess.run(command, capture_output=True, text=True, timeout=15)
-        
-        # Procesar resultados
-        lines = result.stdout.split('\n')
-        ping_results = []
-        
-        for line in lines:
-            if 'time=' in line.lower() or 'tiempo=' in line.lower():
-                import re
-                time_match = re.search(r'time[=<]\s*(\d+(?:\.\d+)?)', line.lower())
-                if time_match:
-                    ping_results.append(float(time_match.group(1)))
-        
-        if ping_results:
-            avg_ping = sum(ping_results) / len(ping_results)
-            min_ping = min(ping_results)
-            max_ping = max(ping_results)
-            
-            return jsonify({
-                'success': True,
-                'domain': domain,
-                'avg': round(avg_ping, 2),
-                'min': round(min_ping, 2),
-                'max': round(max_ping, 2),
-                'packets': len(ping_results),
-                'raw': result.stdout
-            })
-        else:
-            return jsonify({
-                'success': False,
-                'error': 'No se pudo medir la latencia',
-                'raw': result.stdout
-            })
-            
-    except subprocess.TimeoutExpired:
-        return jsonify({'success': False, 'error': 'Timeout en el ping'})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})
-
 @app.route('/admin')
 def admin():
     stats = indexador.obtener_estadisticas()
     paginas_recientes = indexador.obtener_paginas_recientes(20)
     domains = indexador.obtener_domains()
     
-    # Actualizar estado
     global active_crawler, crawler_status
     if active_crawler:
         status = active_crawler.get_status()
@@ -616,8 +650,6 @@ def crawl():
     user_agent_key = request.form.get('user_agent', 'chrome')
     
     if action == 'start_infinite':
-        """INICIA EL CRAWLER INFINITO"""
-        
         def indexador_callback(paginas):
             indexador.agregar_paginas(paginas)
         
@@ -713,6 +745,51 @@ def clear():
 @app.route('/stats')
 def stats():
     return jsonify(indexador.obtener_estadisticas())
+
+@app.route('/cache_stats')
+def cache_stats():
+    """Obtiene estadísticas del caché"""
+    global active_crawler
+    if active_crawler:
+        stats = active_crawler.obtener_estadisticas_cache()
+        return jsonify(stats)
+    return jsonify({'error': 'No hay crawler activo'}), 404
+
+@app.route('/limpiar_cache', methods=['POST'])
+def limpiar_cache():
+    """Limpia el caché manualmente"""
+    global active_crawler
+    data = request.json
+    max_days = data.get('max_days', 30)
+    
+    if active_crawler:
+        active_crawler.limpiar_cache_expirado(max_days)
+        return jsonify({'success': True, 'message': f'Caché limpiado (más de {max_days} días)'})
+    return jsonify({'error': 'No hay crawler activo'}), 404
+
+@app.route('/forzar_actualizacion', methods=['POST'])
+def forzar_actualizacion():
+    """Fuerza la actualización de una URL específica"""
+    data = request.json
+    url = data.get('url', '')
+    
+    if not url:
+        return jsonify({'error': 'URL no especificada'}), 400
+    
+    global active_crawler
+    if active_crawler:
+        active_crawler.eliminar_del_cache(url)
+        
+        def refresh_task():
+            time.sleep(1)
+            active_crawler.crawl_page(url, force_refresh=True)
+        
+        thread = threading.Thread(target=refresh_task)
+        thread.daemon = True
+        thread.start()
+        
+        return jsonify({'success': True, 'message': f'Actualización forzada para {url}'})
+    return jsonify({'error': 'No hay crawler activo'}), 404
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
