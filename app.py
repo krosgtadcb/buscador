@@ -8,6 +8,8 @@ from datetime import datetime
 import socket
 import subprocess
 import platform
+import urllib.parse
+import re
 
 app = Flask(__name__)
 indexador = Indexador()
@@ -70,6 +72,393 @@ def search():
                          buscar_en_internet=buscar_en_internet,
                          user_agent=user_agent)
 
+@app.route('/abrir_url', methods=['POST'])
+def abrir_url():
+    """Abre una URL directamente en el iframe y la añade al crawler"""
+    data = request.json
+    url = data.get('url', '').strip()
+    user_agent_key = data.get('user_agent', 'chrome')
+    indexar = data.get('indexar', True)  # Por defecto, indexar la página
+    
+    if not url:
+        return jsonify({'error': 'URL no válida'}), 400
+    
+    if not url.startswith('http'):
+        url = 'https://' + url
+    
+    try:
+        # Verificar que la URL es accesible
+        user_agent = USER_AGENTS.get(user_agent_key, USER_AGENTS['chrome'])
+        headers = {'User-Agent': user_agent}
+        
+        response = requests.head(url, headers=headers, timeout=5, allow_redirects=True)
+        
+        if response.status_code < 400:
+            # Si se solicita indexar, añadir al crawler
+            if indexar:
+                def indexar_url_task():
+                    crawler = WebCrawler(max_pages=1, user_agent_key=user_agent_key)
+                    resultado = crawler.crawl_page(url)
+                    if resultado['success'] and resultado['page_info']:
+                        indexador.agregar_paginas({url: resultado['page_info']})
+                
+                thread = threading.Thread(target=indexar_url_task)
+                thread.daemon = True
+                thread.start()
+            
+            return jsonify({
+                'success': True,
+                'url': url,
+                'status_code': response.status_code,
+                'message': 'URL válida, abriendo...',
+                'indexada': indexar
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': f'Error HTTP {response.status_code}',
+                'url': url
+            }), 400
+            
+    except requests.exceptions.ConnectionError:
+        return jsonify({'success': False, 'error': 'No se pudo conectar a la URL'}), 400
+    except requests.exceptions.Timeout:
+        return jsonify({'success': False, 'error': 'Timeout al conectar'}), 400
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+@app.route('/proxy')
+def proxy():
+    """Sirve como proxy para cargar páginas web dentro del iframe - CON CSS Y JS"""
+    url = request.args.get('url', '')
+    user_agent_key = request.args.get('ua', 'chrome')
+    
+    if not url:
+        return "URL no especificada", 400
+    
+    try:
+        user_agent = USER_AGENTS.get(user_agent_key, USER_AGENTS['chrome'])
+        headers = {
+            'User-Agent': user_agent,
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
+            'Accept-Encoding': 'gzip, deflate',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1'
+        }
+        
+        # Hacer la petición
+        response = requests.get(url, headers=headers, timeout=10, stream=True)
+        
+        # Determinar el tipo de contenido
+        content_type = response.headers.get('Content-Type', '').lower()
+        
+        # Si es un recurso estático (CSS, JS, imagen, etc.), devolverlo directamente
+        if 'text/html' not in content_type:
+            # Devolver el contenido directamente con los headers correctos
+            excluded_headers = ['content-encoding', 'content-length', 'transfer-encoding', 'connection']
+            headers = [(name, value) for (name, value) in response.raw.headers.items()
+                      if name.lower() not in excluded_headers]
+            
+            response_content = response.content
+            return (response_content, response.status_code, headers)
+        
+        # Es HTML, procesarlo
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(response.text, 'html.parser')
+        base_url = '/'.join(url.split('/')[:3])  # http://dominio.com
+        
+        # Función para hacer URLs absolutas
+        def make_absolute(src, base):
+            if src.startswith('http'):
+                return src
+            elif src.startswith('//'):
+                return 'https:' + src
+            elif src.startswith('/'):
+                return base + src
+            else:
+                # URL relativa
+                if url.endswith('/'):
+                    return url + src
+                else:
+                    return '/'.join(url.split('/')[:-1]) + '/' + src
+        
+        # PROCESAR CSS - Modificar URLs dentro de los archivos CSS
+        for link in soup.find_all('link', rel='stylesheet'):
+            if link.get('href'):
+                original_href = link['href']
+                absolute_href = make_absolute(original_href, base_url)
+                # Cambiar a nuestro proxy para CSS
+                link['href'] = f"/proxy_recurso?url={urllib.parse.quote(absolute_href)}&ua={user_agent_key}"
+        
+        # PROCESAR JAVASCRIPT
+        for script in soup.find_all('script', src=True):
+            if script.get('src'):
+                original_src = script['src']
+                absolute_src = make_absolute(original_src, base_url)
+                # Cambiar a nuestro proxy para JS
+                script['src'] = f"/proxy_recurso?url={urllib.parse.quote(absolute_src)}&ua={user_agent_key}"
+        
+        # PROCESAR IMÁGENES
+        for img in soup.find_all('img', src=True):
+            if img.get('src'):
+                original_src = img['src']
+                absolute_src = make_absolute(original_src, base_url)
+                img['src'] = f"/proxy_recurso?url={urllib.parse.quote(absolute_src)}&ua={user_agent_key}"
+        
+        # PROCESAR ENLACES (a href)
+        for link in soup.find_all('a', href=True):
+            href = link['href']
+            if href.startswith('http') or href.startswith('//') or href.startswith('/'):
+                absolute_href = make_absolute(href, base_url)
+                link['href'] = f"/proxy?url={urllib.parse.quote(absolute_href)}&ua={user_agent_key}"
+                link['target'] = "_parent"
+        
+        # Añadir meta tag para viewport y otros
+        meta_viewport = soup.new_tag('meta')
+        meta_viewport['name'] = 'viewport'
+        meta_viewport['content'] = 'width=device-width, initial-scale=1.0'
+        if soup.head:
+            soup.head.insert(0, meta_viewport)
+        
+        # Añadir barra superior para navegación
+        nav_bar = soup.new_tag('div')
+        nav_bar['style'] = '''
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            right: 0; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white; 
+            padding: 12px; 
+            z-index: 999999; 
+            display: flex; 
+            gap: 10px; 
+            align-items: center; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        '''
+        
+        # Botón volver
+        back_button = soup.new_tag('button')
+        back_button['onclick'] = 'parent.cerrarIframe()'
+        back_button['style'] = '''
+            background: white; 
+            color: #667eea; 
+            border: none; 
+            padding: 8px 20px; 
+            border-radius: 20px; 
+            cursor: pointer; 
+            font-weight: 600;
+            font-size: 14px;
+            transition: all 0.3s;
+        '''
+        back_button['onmouseover'] = "this.style.transform='scale(1.05)'"
+        back_button['onmouseout'] = "this.style.transform='scale(1)'"
+        back_button.string = '← Volver'
+        nav_bar.append(back_button)
+        
+        # URL actual
+        url_span = soup.new_tag('span')
+        url_span['style'] = '''
+            flex: 1; 
+            margin: 0 10px; 
+            font-size: 13px; 
+            overflow: hidden; 
+            text-overflow: ellipsis; 
+            white-space: nowrap;
+            background: rgba(255,255,255,0.2);
+            padding: 6px 12px;
+            border-radius: 20px;
+        '''
+        url_span.string = url
+        nav_bar.append(url_span)
+        
+        # Selector User Agent
+        ua_select = soup.new_tag('select')
+        ua_select['onchange'] = f"parent.cambiarUA(this.value, '{url}')"
+        ua_select['style'] = '''
+            background: white; 
+            color: #667eea; 
+            border: none; 
+            padding: 6px 12px; 
+            border-radius: 20px; 
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+        '''
+        
+        ua_options = [
+            ('chrome', 'Chrome'),
+            ('firefox', 'Firefox'),
+            ('safari', 'Safari'),
+            ('iphone', 'iPhone'),
+            ('android', 'Android'),
+            ('bot', 'Googlebot')
+        ]
+        
+        for value, text in ua_options:
+            option = soup.new_tag('option', value=value)
+            if value == user_agent_key:
+                option['selected'] = 'selected'
+            option.string = text
+            ua_select.append(option)
+        
+        nav_bar.append(ua_select)
+        
+        # Botón indexar
+        indexar_button = soup.new_tag('button')
+        indexar_button['onclick'] = f"parent.indexarURL('{url}')"
+        indexar_button['style'] = '''
+            background: #34a853; 
+            color: white; 
+            border: none; 
+            padding: 8px 20px; 
+            border-radius: 20px; 
+            cursor: pointer; 
+            font-weight: 600;
+            font-size: 14px;
+            margin-left: 5px;
+            transition: all 0.3s;
+        '''
+        indexar_button['onmouseover'] = "this.style.background='#2d8e47'"
+        indexar_button['onmouseout'] = "this.style.background='#34a853'"
+        indexar_button.string = '📥 Indexar'
+        nav_bar.append(indexar_button)
+        
+        # Añadir al body
+        if soup.body:
+            soup.body.insert(0, nav_bar)
+            # Añadir padding-top y estilos base
+            if soup.body.get('style'):
+                soup.body['style'] += '; padding-top: 70px !important; margin: 0 !important;'
+            else:
+                soup.body['style'] = 'padding-top: 70px !important; margin: 0 !important;'
+        
+        # Añadir script para manejar eventos
+        script_tag = soup.new_tag('script')
+        script_tag.string = '''
+            // Prevenir que los enlaces se abran en nueva pestaña
+            document.addEventListener('click', function(e) {
+                const link = e.target.closest('a');
+                if (link && link.target === '_blank') {
+                    e.preventDefault();
+                    if (link.href) {
+                        window.parent.location.href = '/proxy?url=' + encodeURIComponent(link.href) + '&ua=' + document.querySelector('select').value;
+                    }
+                }
+            });
+            
+            // Adaptar iframes
+            window.addEventListener('load', function() {
+                const iframes = document.querySelectorAll('iframe');
+                iframes.forEach(iframe => {
+                    iframe.style.maxWidth = '100%';
+                });
+            });
+        '''
+        if soup.body:
+            soup.body.append(script_tag)
+        
+        return str(soup)
+        
+    except Exception as e:
+        return f"""
+        <html>
+        <head>
+            <style>
+                body {{ 
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    margin: 0; 
+                    padding: 0;
+                    min-height: 100vh;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                }}
+                .error-container {{ 
+                    max-width: 600px; 
+                    margin: 20px; 
+                    background: white; 
+                    border-radius: 16px; 
+                    padding: 40px; 
+                    box-shadow: 0 20px 60px rgba(0,0,0,0.3); 
+                }}
+                h1 {{ 
+                    color: #d93025; 
+                    font-size: 24px;
+                    margin-bottom: 20px;
+                }}
+                p {{ 
+                    color: #5f6368;
+                    line-height: 1.6;
+                    margin-bottom: 10px;
+                }}
+                .url {{ 
+                    background: #f8f9fa;
+                    padding: 12px;
+                    border-radius: 8px;
+                    font-family: monospace;
+                    word-break: break-all;
+                    margin: 20px 0;
+                }}
+                button {{ 
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white; 
+                    border: none; 
+                    padding: 12px 30px; 
+                    border-radius: 25px; 
+                    cursor: pointer; 
+                    font-size: 16px;
+                    font-weight: 600;
+                    transition: all 0.3s;
+                }}
+                button:hover {{
+                    transform: scale(1.05);
+                    box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="error-container">
+                <h1>❌ Error al cargar la página</h1>
+                <p><strong>URL:</strong></p>
+                <div class="url">{url}</div>
+                <p><strong>Error:</strong> {str(e)}</p>
+                <button onclick="parent.cerrarIframe()">Volver al buscador</button>
+            </div>
+        </body>
+        </html>
+        """, 500
+
+@app.route('/proxy_recurso')
+def proxy_recurso():
+    """Proxy para recursos estáticos (CSS, JS, imágenes, etc.)"""
+    url = request.args.get('url', '')
+    user_agent_key = request.args.get('ua', 'chrome')
+    
+    if not url:
+        return "URL no especificada", 400
+    
+    try:
+        user_agent = USER_AGENTS.get(user_agent_key, USER_AGENTS['chrome'])
+        headers = {'User-Agent': user_agent}
+        
+        # Hacer la petición
+        response = requests.get(url, headers=headers, timeout=10, stream=True)
+        
+        # Devolver el contenido con los headers correctos
+        excluded_headers = ['content-encoding', 'content-length', 'transfer-encoding', 'connection']
+        headers = [(name, value) for (name, value) in response.raw.headers.items()
+                  if name.lower() not in excluded_headers]
+        
+        response_content = response.content
+        return (response_content, response.status_code, headers)
+        
+    except Exception as e:
+        return f"Error cargando recurso: {str(e)}", 500
+
 @app.route('/buscar_en_internet', methods=['POST'])
 def buscar_en_internet():
     """Busca una consulta en internet y añade resultados al índice"""
@@ -80,12 +469,11 @@ def buscar_en_internet():
     if not query:
         return jsonify({'error': 'Consulta vacía'}), 400
     
-    # Obtener user agent
     user_agent = USER_AGENTS.get(user_agent_key, USER_AGENTS['chrome'])
     
     try:
         # Buscar en Google
-        search_url = f"https://www.google.com/search?q={query}"
+        search_url = f"https://www.google.com/search?q={urllib.parse.quote(query)}"
         headers = {'User-Agent': user_agent}
         
         response = requests.get(search_url, headers=headers, timeout=10)
@@ -116,7 +504,7 @@ def buscar_en_internet():
                     })
             
             # Crawlear las primeras 5 URLs encontradas
-            crawler = WebCrawler(max_pages=5)
+            crawler = WebCrawler(max_pages=5, user_agent_key=user_agent_key)
             paginas_indexadas = {}
             
             for resultado in resultados[:5]:
@@ -142,55 +530,6 @@ def buscar_en_internet():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/proxy')
-def proxy():
-    """Sirve como proxy para cargar páginas web dentro del iframe"""
-    url = request.args.get('url', '')
-    user_agent_key = request.args.get('ua', 'chrome')
-    
-    if not url:
-        return "URL no especificada", 400
-    
-    try:
-        user_agent = USER_AGENTS.get(user_agent_key, USER_AGENTS['chrome'])
-        headers = {'User-Agent': user_agent}
-        
-        response = requests.get(url, headers=headers, timeout=10)
-        
-        # Modificar los enlaces para que pasen por el proxy
-        from bs4 import BeautifulSoup
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # Modificar enlaces para que se abran en el mismo iframe
-        for link in soup.find_all('a', href=True):
-            href = link['href']
-            if href.startswith('http'):
-                link['href'] = f"/proxy?url={href}&ua={user_agent_key}"
-                link['target'] = "_parent"
-        
-        # Añadir barra superior para navegación
-        nav_bar = soup.new_tag('div')
-        nav_bar['style'] = 'position: fixed; top: 0; left: 0; right: 0; background: #1a73e8; color: white; padding: 10px; z-index: 9999; display: flex; gap: 10px; align-items: center;'
-        nav_bar.string = f'🌐 Navegando: {url[:100]}... '
-        
-        back_button = soup.new_tag('button')
-        back_button['onclick'] = 'window.history.back()'
-        back_button['style'] = 'background: white; color: #1a73e8; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;'
-        back_button.string = '← Volver'
-        
-        nav_bar.append(back_button)
-        
-        # Añadir al body
-        if soup.body:
-            soup.body.insert(0, nav_bar)
-            # Añadir padding-top para no tapar contenido
-            soup.body['style'] = 'padding-top: 50px;'
-        
-        return str(soup)
-        
-    except Exception as e:
-        return f"Error al cargar la página: {str(e)}", 500
-
 @app.route('/ping', methods=['POST'])
 def ping_test():
     """Realiza test de ping a un dominio"""
@@ -215,7 +554,6 @@ def ping_test():
         
         for line in lines:
             if 'time=' in line.lower() or 'tiempo=' in line.lower():
-                # Extraer tiempo
                 import re
                 time_match = re.search(r'time[=<]\s*(\d+(?:\.\d+)?)', line.lower())
                 if time_match:
