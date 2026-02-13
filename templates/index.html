@@ -5,6 +5,90 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Buscador Web</title>
     <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .config-panel {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px auto;
+            max-width: 600px;
+        }
+        
+        .config-item {
+            margin-bottom: 15px;
+        }
+        
+        .config-label {
+            display: block;
+            margin-bottom: 5px;
+            color: #5f6368;
+            font-weight: 500;
+        }
+        
+        .config-select, .config-input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #dadce0;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .ping-test {
+            margin-top: 20px;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #dadce0;
+        }
+        
+        .ping-input-group {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .ping-input {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #dadce0;
+            border-radius: 4px;
+        }
+        
+        .ping-button {
+            background: #1a73e8;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        .ping-results {
+            margin-top: 10px;
+            padding: 10px;
+            background: #e8f0fe;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        
+        .badge-success {
+            background: #e6f4ea;
+            color: #137333;
+        }
+        
+        .badge-warning {
+            background: #fce8e6;
+            color: #c5221f;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
@@ -18,7 +102,31 @@
                        placeholder="Buscar en la web indexada..."
                        autocomplete="off"
                        autofocus>
-                <button type="submit" class="search-button">Buscar</button>
+                
+                <div class="config-panel">
+                    <div class="config-item">
+                        <label class="config-label">User Agent:</label>
+                        <select name="ua" class="config-select">
+                            <option value="chrome">Chrome (Windows)</option>
+                            <option value="firefox">Firefox (Windows)</option>
+                            <option value="safari">Safari (Mac)</option>
+                            <option value="edge">Edge (Windows)</option>
+                            <option value="iphone">iPhone (iOS)</option>
+                            <option value="android">Android</option>
+                            <option value="bot">Googlebot</option>
+                            <option value="custom">Personalizado</option>
+                        </select>
+                    </div>
+                    
+                    <div class="config-item">
+                        <label class="config-label">
+                            <input type="checkbox" name="search_web" value="true">
+                            Buscar en internet si no hay resultados locales
+                        </label>
+                    </div>
+                    
+                    <button type="submit" class="search-button">Buscar</button>
+                </div>
             </form>
             
             <div class="stats">
@@ -36,10 +144,96 @@
                 </div>
             </div>
             
+            <!-- Test de Ping -->
+            <div class="ping-test">
+                <h3>📡 Test de Latencia (Ping)</h3>
+                <div class="ping-input-group">
+                    <input type="text" 
+                           id="pingUrl" 
+                           class="ping-input" 
+                           placeholder="ejemplo.com o IP"
+                           value="google.com">
+                    <button onclick="testPing()" class="ping-button">Probar Ping</button>
+                </div>
+                <div id="pingResults" class="ping-results" style="display: none;"></div>
+            </div>
+            
             <div class="admin-link">
                 <a href="/admin">Panel de Administración</a>
             </div>
         </div>
     </div>
+    
+    <script>
+        function testPing() {
+            const url = document.getElementById('pingUrl').value;
+            const resultsDiv = document.getElementById('pingResults');
+            
+            if (!url) {
+                alert('Por favor ingresa un dominio o IP');
+                return;
+            }
+            
+            resultsDiv.style.display = 'block';
+            resultsDiv.innerHTML = '⏳ Realizando test de ping...';
+            
+            fetch('/ping', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ url: url })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    let calidad = '';
+                    let color = '';
+                    
+                    if (data.avg < 50) {
+                        calidad = 'Excelente';
+                        color = '#137333';
+                    } else if (data.avg < 100) {
+                        calidad = 'Buena';
+                        color = '#1a73e8';
+                    } else if (data.avg < 200) {
+                        calidad = 'Regular';
+                        color = '#f9ab00';
+                    } else {
+                        calidad = 'Mala';
+                        color = '#c5221f';
+                    }
+                    
+                    resultsDiv.innerHTML = `
+                        <div style="margin-bottom: 10px;">
+                            <span class="badge ${data.avg < 100 ? 'badge-success' : 'badge-warning'}">
+                                ${calidad}
+                            </span>
+                        </div>
+                        <strong>🌐 Dominio:</strong> ${data.domain}<br>
+                        <strong>📊 Promedio:</strong> ${data.avg} ms<br>
+                        <strong>⬆️ Mínimo:</strong> ${data.min} ms<br>
+                        <strong>⬇️ Máximo:</strong> ${data.max} ms<br>
+                        <strong>📦 Paquetes:</strong> ${data.packets}/4<br>
+                        <div style="margin-top: 10px; font-size: 10px; color: #5f6368;">
+                            ${data.raw.split('\n').slice(0, 3).join('<br>')}
+                        </div>
+                    `;
+                } else {
+                    resultsDiv.innerHTML = `
+                        <div style="color: #c5221f;">
+                            ❌ Error: ${data.error || 'No se pudo completar el ping'}
+                        </div>
+                        <div style="margin-top: 10px; font-size: 10px;">
+                            ${data.raw || ''}
+                        </div>
+                    `;
+                }
+            })
+            .catch(error => {
+                resultsDiv.innerHTML = `❌ Error: ${error}`;
+            });
+        }
+    </script>
 </body>
 </html>
