@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buscador Web</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="search-container">
+            <h1 class="logo">Buscador<span>.local</span></h1>
+            
+            <form action="/search" method="get" class="search-form">
+                <input type="text" 
+                       name="q" 
+                       class="search-input" 
+                       placeholder="Buscar en la web indexada..."
+                       autocomplete="off"
+                       autofocus>
+                <button type="submit" class="search-button">Buscar</button>
+            </form>
+            
+            <div class="stats">
+                <div class="stat-item">
+                    <span class="stat-value">{{ stats.total_paginas }}</span>
+                    <span class="stat-label">páginas indexadas</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-value">{{ stats.total_keywords }}</span>
+                    <span class="stat-label">palabras clave</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-value">{{ stats.total_domains }}</span>
+                    <span class="stat-label">dominios</span>
+                </div>
+            </div>
+            
+            <div class="admin-link">
+                <a href="/admin">Panel de Administración</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

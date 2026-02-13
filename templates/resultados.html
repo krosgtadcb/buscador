@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ query }} - Buscador</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="results-header">
+        <div class="header-content">
+            <a href="/" class="results-logo">Buscador<span>.local</span></a>
+            
+            <form action="/search" method="get" class="results-search-form">
+                <input type="text" name="q" class="results-search-input" value="{{ query }}">
+                <button type="submit" class="results-search-button">Buscar</button>
+            </form>
+        </div>
+    </div>
+    
+    <div class="results-container">
+        <div class="results-stats">
+            {{ total }} resultados ({{ "%.2f"|format(total/0.5) }} segundos)
+        </div>
+        
+        {% if resultados %}
+            <div class="results-list">
+                {% for resultado in resultados %}
+                    <div class="result-item">
+                        <div class="result-url">{{ resultado.url }}</div>
+                        <a href="{{ resultado.url }}" class="result-title" target="_blank">{{ resultado.title }}</a>
+                        <div class="result-description">{{ resultado.description }}</div>
+                    </div>
+                {% endfor %}
+            </div>
+            
+            {% if total_paginas > 1 %}
+                <div class="pagination">
+                    {% for p in range(1, total_paginas + 1) %}
+                        {% if p == page %}
+                            <span class="page-current">{{ p }}</span>
+                        {% else %}
+                            <a href="/search?q={{ query }}&page={{ p }}" class="page-link">{{ p }}</a>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% else %}
+            <div class="no-results">
+                <p>No se encontraron resultados para "{{ query }}"</p>
+                <p>Sugerencias:</p>
+                <ul>
+                    <li>Revisa la ortografía</li>
+                    <li>Prueba con palabras más generales</li>
+                    <li>Indexa más sitios web desde el panel de administración</li>
+                </ul>
+            </div>
+        {% endif %}
+    </div>
+</body>
+</html>
